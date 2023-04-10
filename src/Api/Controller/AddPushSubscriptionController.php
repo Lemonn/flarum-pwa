@@ -59,22 +59,42 @@ class AddPushSubscriptionController extends AbstractCreateController
         if (!($endpoint = Arr::get($data, 'endpoint'))) {
             throw new InvalidParameterException('Endpoint must be provided');
         }
+        //TODO The amount of subscriptions allowed per user should be settable by an admin
+        //TODO The list of approved push-URLs should be definable in the admin interface
+        //TODO The user should be present whit a list of existing push subscriptions. Including the option
+        // to delete no longer used ones.
 
-        $existing = PushSubscription::where('endpoint', $endpoint)->first();
-        if ($existing) {
-            return $existing;
+        $existing = PushSubscription::where('endpoint', $endpoint);
+        if ($existing->first()) {
+            return $existing->first();
+        } else if ($existing->count() >= 5) {
+            //TODO kick out oldest subscription, or present the user whit an option to delete unused ones
+            //TODO correct error handling
+            return null;
         }
 
-        $subscription = new PushSubscription();
+        //TODO replace whit array form Database. Right now this contains all relevant push services I know. Maybe
+        // missing some chinese ones (Huawei?)
+        $allowed_push_hosts = array("fcm.googleapis.com", "web.push.apple.com", "updates.push.services.mozilla.com");
+        $allowed = false;
+        foreach ($allowed_push_hosts as $i => $value) {
+            if (parse_url($endpoint, PHP_URL_HOST) == $value) {
+                $allowed = true;
+            }
+        }
+        if (!$allowed) {
+            //TODO correct error handling
+            return null;
+        } else {
+            $subscription = new PushSubscription();
 
-        $subscription->user_id = $actor->id;
-        $subscription->endpoint = $endpoint;
-        $subscription->expires_at = isset($data['expirationTime']) ? Carbon::parse($data['expirationTime']) : null;
-        $subscription->vapid_public_key = $this->settings->get('askvortsov-pwa.vapid.public');
-        $subscription->keys = isset($data['keys']) ? json_encode($data['keys']) : null;
-
-        $subscription->save();
-
-        return $subscription;
+            $subscription->user_id = $actor->id;
+            $subscription->endpoint = $endpoint;
+            $subscription->expires_at = isset($data['expirationTime']) ? Carbon::parse($data['expirationTime']) : null;
+            $subscription->vapid_public_key = $this->settings->get('askvortsov-pwa.vapid.public');
+            $subscription->keys = isset($data['keys']) ? json_encode($data['keys']) : null;
+            $subscription->save();
+            return $subscription;
+        }
     }
 }
